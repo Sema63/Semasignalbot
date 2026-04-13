@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+body{margin:0;padding:20px;background:#111;color:#fff;font-family:-apple-system}
+h1{font-size:24px;margin:0 0 20px}
+.signal{padding:20px;margin:20px 0;border-radius:12px;font-size:20px;font-weight:bold;text-align:center}
+.buy{background:#22c55e}.sell{background:#ef4444}.hold{background:#f59e0b}
+button{padding:12px 24px;margin:5px;border:0;border-radius:8px;color:white;font-weight:bold;font-size:16px;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:20px 0}
+.card{padding:12px;background:rgba(255,255,255,.1);border-radius:12px;text-align:center}
+</style>
+</head>
+<body>
+<h1>📈 StockCrypto PRO</h1>
+<div id="signal" class="signal hold">AAPL: ДЕРЖАТЬ</div>
+
+<div class="grid">
+<button class="buy" onclick="trade('КУПИТЬ')">🟢 КУПИТЬ</button>
+<button class="sell" onclick="trade('ПРОДАТЬ')">🔴 ПРОДАТЬ</button>
+<button class="hold" onclick="trade('ДЕРЖАТЬ')">🟡 ДЕРЖАТЬ</button>
+</div>
+
+<div class="grid">
+<div class="card"><strong>AAPL</strong><br>$260.48<br><span style="color:#22c55e">+0.12%</span></div>
+<div class="card"><strong>MSFT</strong><br>$327.87<br><span style="color:#ef4444">-0.45%</span></div>
+<div class="card"><strong>GOOGL</strong><br>$142.30<br><span style="color:#22c55e">+1.23%</span></div>
+<div class="card"><strong>BTC</strong><br>$62,450<br><span style="color:#f59e0b">+2.1%</span></div>
+</div>
+
+<script>
+if(window.Telegram?.WebApp){
+Telegram.WebApp.ready();
+Telegram.WebApp.expand();
+}
+
+function trade(action){
+Telegram?.WebApp?.showAlert(`🚨 Сигнал: ${action}`)||alert(`🚨 Сигнал: ${action}`);
+}
+
+setInterval(()=>{
+const signals=['КУПИТЬ','ПРОДАТЬ','ДЕРЖАТЬ'];
+const colors=['#22c55e','#ef4444','#f59e0b'];
+const i=Math.floor(Math.random()*3);
+document.getElementById('signal').innerHTML=`AAPL: ${signals[i]}`;
+document.getElementById('signal').className=`signal ${signals[i]=='КУПИТЬ'?'buy':signals[i]=='ПРОДАТЬ'?'sell':'hold'}`;
+},5000);
+</script>
+</body>
+</html>
