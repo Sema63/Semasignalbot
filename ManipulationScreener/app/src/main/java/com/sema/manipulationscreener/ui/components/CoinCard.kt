@@ -56,7 +56,7 @@ fun CoinCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = coin.symbol.removeSuffix("USDT"),
+                        text = coin.symbol.removeSuffix("USDT").removeSuffix("_USDT").trimEnd('_'),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface

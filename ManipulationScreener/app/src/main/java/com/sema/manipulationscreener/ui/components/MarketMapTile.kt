@@ -82,7 +82,8 @@ fun MarketMapTile(
             Text(
                 text = coin.symbol
                     .removeSuffix("USDT")
-                    .removeSuffix("_USDT"),
+                    .removeSuffix("_USDT")
+                    .trimEnd('_'),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
