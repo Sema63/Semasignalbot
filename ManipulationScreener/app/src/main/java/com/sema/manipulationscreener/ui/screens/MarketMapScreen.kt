@@ -1,10 +1,10 @@
 package com.sema.manipulationscreener.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,19 +49,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.sema.manipulationscreener.ui.components.CoinCard
+import com.sema.manipulationscreener.ui.components.MarketMapTile
 import com.sema.manipulationscreener.ui.theme.AccentGreen
 import com.sema.manipulationscreener.ui.theme.AccentOrange
 import com.sema.manipulationscreener.ui.theme.AccentRed
 import com.sema.manipulationscreener.ui.theme.DarkBackground
+import com.sema.manipulationscreener.ui.theme.DarkCard
 import com.sema.manipulationscreener.ui.theme.DarkSurface
 import com.sema.manipulationscreener.ui.theme.TextSecondary
 import com.sema.manipulationscreener.viewmodel.ScreenerViewModel
 import com.sema.manipulationscreener.viewmodel.SortBy
+import com.sema.manipulationscreener.viewmodel.ViewMode
+import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ListScreen(
+fun MarketMapScreen(
     viewModel: ScreenerViewModel,
     modifier: Modifier = Modifier
 ) {
@@ -70,7 +76,7 @@ fun ListScreen(
             .fillMaxSize()
             .background(DarkBackground)
     ) {
-        // Top bar
+        // Top bar with controls
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -78,9 +84,10 @@ fun ListScreen(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Title
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "MANIPULATION SCREENER",
+                    text = "MARKET MAP",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -115,7 +122,7 @@ fun ListScreen(
                 }
             }
 
-            // Auto-refresh
+            // Auto-refresh toggle
             IconButton(
                 onClick = { viewModel.toggleAutoRefresh() },
                 modifier = Modifier.size(36.dp)
@@ -128,7 +135,7 @@ fun ListScreen(
                 )
             }
 
-            // Refresh
+            // Manual refresh
             IconButton(
                 onClick = { viewModel.scan() },
                 enabled = !uiState.isLoading,
@@ -138,34 +145,56 @@ fun ListScreen(
             }
         }
 
-        // Interval selector
+        // Interval selector bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(DarkSurface.copy(alpha = 0.7f))
                 .padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf("5" to "5м", "15" to "15м", "30" to "30м", "60" to "1ч", "240" to "4ч").forEach { (value, label) ->
-                FilterChip(
-                    selected = uiState.settings.klineInterval == value,
-                    onClick = {
-                        viewModel.updateSettings(uiState.settings.copy(klineInterval = value))
-                        viewModel.scan()
-                    },
-                    label = { Text(label, fontSize = 10.sp) },
-                    modifier = Modifier
-                        .height(28.dp)
-                        .padding(end = 4.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AccentOrange.copy(alpha = 0.3f),
-                        selectedLabelColor = AccentOrange
+            // Interval chips
+            Row {
+                listOf("5" to "5м", "15" to "15м", "30" to "30м", "60" to "1ч", "240" to "4ч").forEach { (value, label) ->
+                    FilterChip(
+                        selected = uiState.settings.klineInterval == value,
+                        onClick = {
+                            viewModel.updateSettings(uiState.settings.copy(klineInterval = value))
+                            viewModel.scan()
+                        },
+                        label = { Text(label, fontSize = 10.sp) },
+                        modifier = Modifier
+                            .height(28.dp)
+                            .padding(end = 4.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = AccentOrange.copy(alpha = 0.3f),
+                            selectedLabelColor = AccentOrange
+                        )
                     )
-                )
+                }
+            }
+
+            // Limit selector
+            Row {
+                listOf(9, 16, 25).forEach { limit ->
+                    FilterChip(
+                        selected = uiState.gridLimit == limit,
+                        onClick = { viewModel.setGridLimit(limit) },
+                        label = { Text("$limit", fontSize = 10.sp) },
+                        modifier = Modifier
+                            .height(28.dp)
+                            .padding(end = 4.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = AccentOrange.copy(alpha = 0.3f),
+                            selectedLabelColor = AccentOrange
+                        )
+                    )
+                }
             }
         }
 
-        // Progress
+        // Progress bar
         if (uiState.isLoading) {
             Column(
                 modifier = Modifier
@@ -204,31 +233,11 @@ fun ListScreen(
             }
         }
 
-        // Results header
-        if (!uiState.isLoading && uiState.coins.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Найдено: ${uiState.coins.size}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Мин. памп: ${uiState.settings.minPumpPercent.toInt()}%",
-                    fontSize = 10.sp,
-                    color = TextSecondary
-                )
-            }
-        }
+        // Market Map Grid
+        val displayCoins = uiState.coins.take(uiState.gridLimit)
+        val columns = sqrt(uiState.gridLimit.toDouble()).toInt()
 
-        // Empty state
-        if (uiState.coins.isEmpty() && !uiState.isLoading && uiState.error == null) {
+        if (displayCoins.isEmpty() && !uiState.isLoading && uiState.error == null) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -249,12 +258,17 @@ fun ListScreen(
                     )
                 }
             }
-        }
-
-        // Coin list
-        LazyColumn {
-            items(uiState.coins) { coin ->
-                CoinCard(coin = coin)
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                contentPadding = PaddingValues(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(displayCoins) { coin ->
+                    MarketMapTile(coin = coin)
+                }
             }
         }
     }

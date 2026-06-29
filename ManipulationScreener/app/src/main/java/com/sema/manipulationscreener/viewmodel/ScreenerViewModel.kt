@@ -9,14 +9,21 @@ import com.sema.manipulationscreener.model.ManipulationCoin
 import com.sema.manipulationscreener.model.ScreenerSettings
 import com.sema.manipulationscreener.util.ManipulationDetector
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+
+enum class ViewMode {
+    MARKET_MAP,
+    LIST
+}
 
 data class ScreenerUiState(
     val coins: List<ManipulationCoin> = emptyList(),
@@ -26,13 +33,20 @@ data class ScreenerUiState(
     val scannedCount: Int = 0,
     val totalCount: Int = 0,
     val settings: ScreenerSettings = ScreenerSettings(),
-    val sortBy: SortBy = SortBy.PUMP_PERCENT
+    val sortBy: SortBy = SortBy.PRICE_RANGE_5M,
+    val viewMode: ViewMode = ViewMode.MARKET_MAP,
+    val gridLimit: Int = 9,
+    val autoRefreshEnabled: Boolean = true,
+    val lastUpdateTime: Long = 0L
 )
 
-enum class SortBy {
-    PUMP_PERCENT,
-    DROP_PERCENT,
-    TURNOVER
+enum class SortBy(val displayName: String) {
+    PRICE_RANGE_5M("Диапазон 5м"),
+    PRICE_RANGE_15M("Диапазон 15м"),
+    PUMP_PERCENT("% пампа"),
+    DROP_PERCENT("% отката"),
+    TURNOVER("Оборот"),
+    VOLUME("Объём")
 }
 
 data class TickerInfo(
@@ -49,9 +63,37 @@ class ScreenerViewModel : ViewModel() {
     val uiState: StateFlow<ScreenerUiState> = _uiState.asStateFlow()
 
     private val semaphore = Semaphore(5)
+    private var autoRefreshJob: Job? = null
 
     init {
         scan()
+        startAutoRefresh()
+    }
+
+    private fun startAutoRefresh() {
+        autoRefreshJob?.cancel()
+        autoRefreshJob = viewModelScope.launch {
+            while (true) {
+                delay(30_000L)
+                if (_uiState.value.autoRefreshEnabled && !_uiState.value.isLoading) {
+                    scan()
+                }
+            }
+        }
+    }
+
+    fun toggleAutoRefresh() {
+        _uiState.value = _uiState.value.copy(
+            autoRefreshEnabled = !_uiState.value.autoRefreshEnabled
+        )
+    }
+
+    fun setViewMode(mode: ViewMode) {
+        _uiState.value = _uiState.value.copy(viewMode = mode)
+    }
+
+    fun setGridLimit(limit: Int) {
+        _uiState.value = _uiState.value.copy(gridLimit = limit)
     }
 
     fun scan() {
@@ -95,7 +137,7 @@ class ScreenerViewModel : ViewModel() {
                                     Exchange.GATEIO -> fetchGateIoKlines(ticker.symbol, settings)
                                 }
 
-                                ManipulationDetector.detect(
+                                val coin = ManipulationDetector.detect(
                                     symbol = ticker.symbol,
                                     candles = candles,
                                     currentPrice = ticker.lastPrice,
@@ -104,6 +146,11 @@ class ScreenerViewModel : ViewModel() {
                                     turnover24h = ticker.turnover24h,
                                     settings = settings
                                 )
+
+                                coin?.let {
+                                    val enriched = enrichWithPriceRanges(it, candles)
+                                    enriched
+                                }
                             } catch (_: Exception) {
                                 null
                             } finally {
@@ -128,7 +175,8 @@ class ScreenerViewModel : ViewModel() {
                     coins = sorted,
                     isLoading = false,
                     progress = 1f,
-                    scannedCount = totalCount
+                    scannedCount = totalCount,
+                    lastUpdateTime = System.currentTimeMillis()
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -137,6 +185,60 @@ class ScreenerViewModel : ViewModel() {
                 )
             }
         }
+    }
+
+    private fun enrichWithPriceRanges(
+        coin: ManipulationCoin,
+        candles: List<Candle>
+    ): ManipulationCoin {
+        val sorted = candles.sortedBy { it.timestamp }
+        if (sorted.isEmpty()) return coin
+
+        val intervalMinutes = when (_uiState.value.settings.klineInterval) {
+            "5" -> 5
+            "15" -> 15
+            "30" -> 30
+            "60" -> 60
+            "240" -> 240
+            else -> 15
+        }
+
+        val candles5m = (5.0 / intervalMinutes).toInt().coerceAtLeast(1)
+        val candles15m = (15.0 / intervalMinutes).toInt().coerceAtLeast(1)
+
+        val recent5m = sorted.takeLast(candles5m)
+        val recent15m = sorted.takeLast(candles15m)
+
+        val priceChange5m = if (recent5m.isNotEmpty()) {
+            val first = recent5m.first().open
+            val last = recent5m.last().close
+            if (first > 0) ((last - first) / first) * 100.0 else 0.0
+        } else 0.0
+
+        val priceChange15m = if (recent15m.isNotEmpty()) {
+            val first = recent15m.first().open
+            val last = recent15m.last().close
+            if (first > 0) ((last - first) / first) * 100.0 else 0.0
+        } else 0.0
+
+        val priceRange5m = if (recent5m.isNotEmpty()) {
+            val high = recent5m.maxOf { it.high }
+            val low = recent5m.minOf { it.low }
+            if (low > 0) ((high - low) / low) * 100.0 else 0.0
+        } else 0.0
+
+        val priceRange15m = if (recent15m.isNotEmpty()) {
+            val high = recent15m.maxOf { it.high }
+            val low = recent15m.minOf { it.low }
+            if (low > 0) ((high - low) / low) * 100.0 else 0.0
+        } else 0.0
+
+        return coin.copy(
+            priceChange5m = priceChange5m,
+            priceChange15m = priceChange15m,
+            priceRange5m = priceRange5m,
+            priceRange15m = priceRange15m
+        )
     }
 
     fun updateSettings(settings: ScreenerSettings) {
@@ -155,9 +257,12 @@ class ScreenerViewModel : ViewModel() {
         sortBy: SortBy
     ): List<ManipulationCoin> {
         return when (sortBy) {
+            SortBy.PRICE_RANGE_5M -> coins.sortedByDescending { it.priceRange5m }
+            SortBy.PRICE_RANGE_15M -> coins.sortedByDescending { it.priceRange15m }
             SortBy.PUMP_PERCENT -> coins.sortedByDescending { it.pumpPercent }
             SortBy.DROP_PERCENT -> coins.sortedByDescending { it.dropFromHighPercent }
             SortBy.TURNOVER -> coins.sortedByDescending { it.turnover24h }
+            SortBy.VOLUME -> coins.sortedByDescending { it.volume24h }
         }
     }
 
@@ -241,5 +346,10 @@ class ScreenerViewModel : ViewModel() {
                 volume = c.volume.toDouble()
             )
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        autoRefreshJob?.cancel()
     }
 }

@@ -62,7 +62,11 @@ data class ManipulationCoin(
     val turnover24h: Double,
     val candles: List<Candle>,
     val manipulationType: ManipulationType,
-    val timeframeMinutes: Int
+    val timeframeMinutes: Int,
+    val priceChange5m: Double = 0.0,
+    val priceChange15m: Double = 0.0,
+    val priceRange5m: Double = 0.0,
+    val priceRange15m: Double = 0.0
 )
 
 enum class ManipulationType {

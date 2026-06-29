@@ -138,6 +138,18 @@ fun CoinCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Price range info
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                InfoChip(label = "Диап 5м", value = "${df.format(coin.priceRange5m)}%")
+                InfoChip(label = "Диап 15м", value = "${df.format(coin.priceRange15m)}%")
+                InfoChip(label = "Изм 5м", value = "${if (coin.priceChange5m >= 0) "+" else ""}${df.format(coin.priceChange5m)}%")
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             // Bottom info
             Row(
                 modifier = Modifier.fillMaxWidth(),

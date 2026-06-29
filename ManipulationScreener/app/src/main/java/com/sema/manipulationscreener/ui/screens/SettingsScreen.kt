@@ -11,22 +11,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +45,8 @@ import com.sema.manipulationscreener.viewmodel.ScreenerViewModel
 @Composable
 fun SettingsScreen(
     viewModel: ScreenerViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val currentSettings = uiState.settings
@@ -62,26 +57,29 @@ fun SettingsScreen(
     var minTurnover by remember { mutableDoubleStateOf(currentSettings.minTurnover24h) }
     var selectedExchange by remember { mutableStateOf(currentSettings.exchange) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Настройки скринера") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkSurface
-                )
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DarkSurface)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "НАСТРОЙКИ СКРИНЕРА",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
             )
         }
-    ) { paddingValues ->
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkBackground)
-                .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
@@ -102,13 +100,13 @@ fun SettingsScreen(
                     }
                 }
                 Text(
-                    text = "Bybit - основная биржа, Gate.io - альтернатива",
+                    text = "Bybit - основная, Gate.io - альтернатива",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Min pump percent
             SettingSection(title = "Минимальный памп (%)") {
@@ -129,13 +127,13 @@ fun SettingsScreen(
                     )
                 )
                 Text(
-                    text = "Монеты с пампом менее ${minPumpPercent.toInt()}% будут пропущены",
+                    text = "Монеты с пампом менее ${minPumpPercent.toInt()}% пропущены",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Min drop from high
             SettingSection(title = "Минимальный откат от хая (%)") {
@@ -156,13 +154,13 @@ fun SettingsScreen(
                     )
                 )
                 Text(
-                    text = "Показывать только монеты, которые уже откатились от хая на ${minDropPercent.toInt()}%+",
+                    text = "Откат от хая минимум ${minDropPercent.toInt()}%",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Kline interval
             SettingSection(title = "Таймфрейм свечей") {
@@ -182,7 +180,7 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Min turnover
             SettingSection(title = "Мин. оборот 24ч (USDT)") {
@@ -202,13 +200,13 @@ fun SettingsScreen(
                     )
                 )
                 Text(
-                    text = "Фильтр по ликвидности для исключения мусорных монет",
+                    text = "Фильтр по ликвидности",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Apply button
             Button(
@@ -227,14 +225,14 @@ fun SettingsScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .height(48.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
             ) {
                 Text(
                     text = "ПРИМЕНИТЬ И СКАНИРОВАТЬ",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    fontSize = 14.sp
                 )
             }
         }
