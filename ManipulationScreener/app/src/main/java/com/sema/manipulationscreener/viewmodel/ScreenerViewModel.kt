@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sema.manipulationscreener.api.RetrofitClient
 import com.sema.manipulationscreener.model.Candle
+import com.sema.manipulationscreener.model.Exchange
 import com.sema.manipulationscreener.model.ManipulationCoin
 import com.sema.manipulationscreener.model.ScreenerSettings
 import com.sema.manipulationscreener.util.ManipulationDetector
@@ -34,13 +35,20 @@ enum class SortBy {
     TURNOVER
 }
 
+data class TickerInfo(
+    val symbol: String,
+    val lastPrice: Double,
+    val markPrice: Double,
+    val volume24h: Double,
+    val turnover24h: Double
+)
+
 class ScreenerViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScreenerUiState())
     val uiState: StateFlow<ScreenerUiState> = _uiState.asStateFlow()
 
-    private val api = RetrofitClient.api
-    private val semaphore = Semaphore(5) // limit concurrent API calls
+    private val semaphore = Semaphore(5)
 
     init {
         scan()
@@ -57,28 +65,24 @@ class ScreenerViewModel : ViewModel() {
             )
 
             try {
-                // Step 1: Get all USDT perpetual tickers
-                val tickerResponse = api.getTickers(category = "linear")
-                if (tickerResponse.retCode != 0) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "API error: ${tickerResponse.retMsg}"
-                    )
-                    return@launch
-                }
-
                 val settings = _uiState.value.settings
 
-                // Filter for USDT pairs with sufficient volume
-                val candidates = tickerResponse.result.list.filter { ticker ->
-                    ticker.symbol.endsWith("USDT") &&
-                        (ticker.turnover24h.toDoubleOrNull() ?: 0.0) >= settings.minTurnover24h
+                val candidates = when (settings.exchange) {
+                    Exchange.BYBIT -> fetchBybitTickers(settings)
+                    Exchange.GATEIO -> fetchGateIoTickers(settings)
                 }
 
                 val totalCount = candidates.size
                 _uiState.value = _uiState.value.copy(totalCount = totalCount)
 
-                // Step 2: Scan each candidate for manipulation pattern
+                if (candidates.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        progress = 1f
+                    )
+                    return@launch
+                }
+
                 val detectedCoins = mutableListOf<ManipulationCoin>()
                 var scanned = 0
 
@@ -86,33 +90,20 @@ class ScreenerViewModel : ViewModel() {
                     async {
                         semaphore.withPermit {
                             try {
-                                val klineResponse = api.getKlines(
-                                    symbol = ticker.symbol,
-                                    interval = settings.klineInterval,
-                                    limit = 96
-                                )
-
-                                if (klineResponse.retCode == 0) {
-                                    val candles = parseCandles(klineResponse.result.list)
-                                    val currentPrice = ticker.lastPrice.toDoubleOrNull() ?: 0.0
-                                    val markPriceVal = ticker.markPrice.toDoubleOrNull() ?: currentPrice
-                                    val vol24h = ticker.volume24h.toDoubleOrNull() ?: 0.0
-                                    val turnover24h = ticker.turnover24h.toDoubleOrNull() ?: 0.0
-
-                                    val detected = ManipulationDetector.detect(
-                                        symbol = ticker.symbol,
-                                        candles = candles,
-                                        currentPrice = currentPrice,
-                                        markPrice = markPriceVal,
-                                        volume24h = vol24h,
-                                        turnover24h = turnover24h,
-                                        settings = settings
-                                    )
-
-                                    detected
-                                } else {
-                                    null
+                                val candles = when (settings.exchange) {
+                                    Exchange.BYBIT -> fetchBybitKlines(ticker.symbol, settings)
+                                    Exchange.GATEIO -> fetchGateIoKlines(ticker.symbol, settings)
                                 }
+
+                                ManipulationDetector.detect(
+                                    symbol = ticker.symbol,
+                                    candles = candles,
+                                    currentPrice = ticker.lastPrice,
+                                    markPrice = ticker.markPrice,
+                                    volume24h = ticker.volume24h,
+                                    turnover24h = ticker.turnover24h,
+                                    settings = settings
+                                )
                             } catch (_: Exception) {
                                 null
                             } finally {
@@ -170,8 +161,35 @@ class ScreenerViewModel : ViewModel() {
         }
     }
 
-    private fun parseCandles(raw: List<List<String>>): List<Candle> {
-        return raw.mapNotNull { item ->
+    // --- Bybit ---
+
+    private suspend fun fetchBybitTickers(settings: ScreenerSettings): List<TickerInfo> {
+        val response = RetrofitClient.bybitApi.getTickers(category = "linear")
+        if (response.retCode != 0) {
+            throw RuntimeException("Bybit API: ${response.retMsg}")
+        }
+        return response.result.list
+            .filter { it.symbol.endsWith("USDT") }
+            .filter { (it.turnover24h.toDoubleOrNull() ?: 0.0) >= settings.minTurnover24h }
+            .map { ticker ->
+                TickerInfo(
+                    symbol = ticker.symbol,
+                    lastPrice = ticker.lastPrice.toDoubleOrNull() ?: 0.0,
+                    markPrice = ticker.markPrice.toDoubleOrNull() ?: 0.0,
+                    volume24h = ticker.volume24h.toDoubleOrNull() ?: 0.0,
+                    turnover24h = ticker.turnover24h.toDoubleOrNull() ?: 0.0
+                )
+            }
+    }
+
+    private suspend fun fetchBybitKlines(symbol: String, settings: ScreenerSettings): List<Candle> {
+        val response = RetrofitClient.bybitApi.getKlines(
+            symbol = symbol,
+            interval = settings.klineInterval,
+            limit = 96
+        )
+        if (response.retCode != 0) return emptyList()
+        return response.result.list.mapNotNull { item ->
             if (item.size >= 6) {
                 Candle(
                     timestamp = item[0].toLongOrNull() ?: return@mapNotNull null,
@@ -181,9 +199,47 @@ class ScreenerViewModel : ViewModel() {
                     close = item[4].toDoubleOrNull() ?: return@mapNotNull null,
                     volume = item[5].toDoubleOrNull() ?: return@mapNotNull null
                 )
-            } else {
-                null
+            } else null
+        }
+    }
+
+    // --- Gate.io ---
+
+    private suspend fun fetchGateIoTickers(settings: ScreenerSettings): List<TickerInfo> {
+        val tickers = RetrofitClient.gateIoApi.getTickers()
+        return tickers
+            .filter { it.contract.endsWith("_USDT") }
+            .filter { (it.volume24hSettle.toDoubleOrNull() ?: 0.0) >= settings.minTurnover24h }
+            .map { ticker ->
+                TickerInfo(
+                    symbol = ticker.contract,
+                    lastPrice = ticker.last.toDoubleOrNull() ?: 0.0,
+                    markPrice = ticker.markPrice.toDoubleOrNull() ?: 0.0,
+                    volume24h = ticker.volume24h.toDoubleOrNull() ?: 0.0,
+                    turnover24h = ticker.volume24hSettle.toDoubleOrNull() ?: 0.0
+                )
             }
+    }
+
+    private suspend fun fetchGateIoKlines(symbol: String, settings: ScreenerSettings): List<Candle> {
+        val intervalMap = mapOf(
+            "5" to "5m", "15" to "15m", "30" to "30m", "60" to "1h", "240" to "4h"
+        )
+        val interval = intervalMap[settings.klineInterval] ?: "15m"
+        val candles = RetrofitClient.gateIoApi.getKlines(
+            contract = symbol,
+            interval = interval,
+            limit = 96
+        )
+        return candles.map { c ->
+            Candle(
+                timestamp = c.timestamp * 1000,
+                open = c.open.toDoubleOrNull() ?: 0.0,
+                high = c.high.toDoubleOrNull() ?: 0.0,
+                low = c.low.toDoubleOrNull() ?: 0.0,
+                close = c.close.toDoubleOrNull() ?: 0.0,
+                volume = c.volume.toDouble()
+            )
         }
     }
 }

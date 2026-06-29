@@ -7,7 +7,8 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    private const val BASE_URL = "https://api.bybit.com/"
+    private const val BYBIT_BASE_URL = "https://api.bybit.com/"
+    private const val GATEIO_BASE_URL = "https://api.gateio.ws/"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -15,12 +16,21 @@ object RetrofitClient {
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    val api: BybitApi by lazy {
+    val bybitApi: BybitApi by lazy {
         Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(BYBIT_BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(BybitApi::class.java)
+    }
+
+    val gateIoApi: GateIoApi by lazy {
+        Retrofit.Builder()
+            .baseUrl(GATEIO_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GateIoApi::class.java)
     }
 }

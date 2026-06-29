@@ -76,7 +76,7 @@ fun MainScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Поиск монет для SHORT",
+                            text = "${uiState.settings.exchange.displayName} | Поиск монет для SHORT",
                             fontSize = 11.sp,
                             color = TextSecondary
                         )

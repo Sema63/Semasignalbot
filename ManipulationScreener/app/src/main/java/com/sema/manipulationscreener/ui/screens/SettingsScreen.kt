@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sema.manipulationscreener.model.Exchange
 import com.sema.manipulationscreener.model.ScreenerSettings
 import com.sema.manipulationscreener.ui.theme.AccentOrange
 import com.sema.manipulationscreener.ui.theme.DarkBackground
@@ -59,6 +60,7 @@ fun SettingsScreen(
     var minDropPercent by remember { mutableDoubleStateOf(currentSettings.minDropFromHighPercent) }
     var selectedInterval by remember { mutableStateOf(currentSettings.klineInterval) }
     var minTurnover by remember { mutableDoubleStateOf(currentSettings.minTurnover24h) }
+    var selectedExchange by remember { mutableStateOf(currentSettings.exchange) }
 
     Scaffold(
         topBar = {
@@ -83,6 +85,31 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            // Exchange selection
+            SettingSection(title = "Биржа") {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Exchange.entries.forEach { exchange ->
+                        FilterChip(
+                            selected = selectedExchange == exchange,
+                            onClick = { selectedExchange = exchange },
+                            label = { Text(exchange.displayName) },
+                            modifier = Modifier.padding(end = 8.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = AccentOrange.copy(alpha = 0.3f),
+                                selectedLabelColor = AccentOrange
+                            )
+                        )
+                    }
+                }
+                Text(
+                    text = "Bybit - основная биржа, Gate.io - альтернатива",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Min pump percent
             SettingSection(title = "Минимальный памп (%)") {
                 Text(
@@ -191,7 +218,8 @@ fun SettingsScreen(
                             minPumpPercent = minPumpPercent,
                             minDropFromHighPercent = minDropPercent,
                             klineInterval = selectedInterval,
-                            minTurnover24h = minTurnover
+                            minTurnover24h = minTurnover,
+                            exchange = selectedExchange
                         )
                     )
                     viewModel.scan()

@@ -71,11 +71,17 @@ enum class ManipulationType {
     VERTICAL_PUMP
 }
 
+enum class Exchange(val displayName: String) {
+    BYBIT("Bybit"),
+    GATEIO("Gate.io")
+}
+
 // Settings for detection
 data class ScreenerSettings(
     val minPumpPercent: Double = 30.0,
     val minDropFromHighPercent: Double = 10.0,
     val scanTimeframeMinutes: Int = 240,
     val klineInterval: String = "15",
-    val minTurnover24h: Double = 500_000.0
+    val minTurnover24h: Double = 500_000.0,
+    val exchange: Exchange = Exchange.BYBIT
 )
